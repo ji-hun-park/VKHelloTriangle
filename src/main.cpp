@@ -123,6 +123,8 @@ private:
         createSyncObjects();         // 동기화 객체 생성
     }
 
+    void drawFrame();
+
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
@@ -796,6 +798,66 @@ private:
             
             throw std::runtime_error("동기화 객체 생성에 실패했습니다!");
         }
+    }
+
+    // 렌더링 루프
+    void drawFrame() {
+        // 1. 이전 프레임 작업이 끝날 때까지 CPU 대기
+        // 파라미터: (device, 펜스 개수, 펜스 배열, 모두 기다릴지 여부, 타임아웃 시간)
+        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+
+        // 2. 스왑체인에서 렌더링할 다음 이미지 인덱스 획득
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+        // (중요) 펜스 대기가 완전히 끝났고, 이미지를 무사히 얻어왔다면 펜스를 리셋합니다.
+        // 만약 이미지를 얻어오기 전에 리셋했는데 화면 리사이즈 등으로 실패하면 데드락(Deadlock)에 빠질 수 있습니다.
+        vkResetFences(device, 1, &inFlightFence);
+
+        // 3. 커맨드 버퍼 초기화 및 그리기 명령 재기록 (이전 단계에서 만든 함수 활용)
+        vkResetCommandBuffer(commandBuffer, 0);
+        recordCommandBuffer(commandBuffer, imageIndex);
+
+        // 4. 그래픽스 큐에 명령 제출
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        // 기다릴 세마포어와 파이프라인 대기 단계 설정
+        VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages; // 픽셀 색상을 쓰기 직전 단계에서 대기
+
+        // 제출할 커맨드 버퍼 지정
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        // 작업 완료 후 신호를 보낼 세마포어 설정
+        VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        // 큐에 제출! (작업이 완전히 끝나면 inFlightFence를 '열림' 상태로 바꿈)
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+            throw std::runtime_error("커맨드 버퍼 제출에 실패했습니다!");
+        }
+
+        // 5. 완성된 이미지를 화면에 출력
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        // 렌더링이 끝날 때까지 대기하도록 설정
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapChains[] = {swapChain};
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+        presentInfo.pImageIndices = &imageIndex;
+
+        // 최종 화면 출력
+        vkQueuePresentKHR(presentQueue, &presentInfo);
     }
 };
 
