@@ -241,17 +241,25 @@ private:
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
+        // GLFW에서 요구하는 필수 인스턴스 확장 기능 가져오기
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions;
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        std::vector<const char*> instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
         if (enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
             
-            // 확장 기능 추가 (GLFW 요구 확장 기능 + 디버그 확장 기능)
-            createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-            createInfo.ppEnabledExtensionNames = extensions.data();
+            // 디버그 확장 기능 추가
+            instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         } else {
             createInfo.enabledLayerCount = 0;
-            // 릴리즈 빌드용 확장 기능만 추가
         }
+
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
+        createInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
@@ -637,8 +645,8 @@ private:
     // 그래픽스 파이프라인 생성 함수
     void createGraphicsPipeline() {
         // 1. 파일 읽기
-        auto vertShaderCode = readFile("vert.spv");
-        auto fragShaderCode = readFile("frag.spv");
+        auto vertShaderCode = readFile("../shaders/vert.spv");
+        auto fragShaderCode = readFile("../shaders/frag.spv");
 
         // 2. 셰이더 모듈 생성
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, device);
