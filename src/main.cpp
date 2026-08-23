@@ -53,6 +53,7 @@ private:
 
     // --- Vulkan 객체 핸들 변수 ---
     VkInstance instance;
+    VkInstanceCreateInfo createInfo{};
     VkDebugUtilsMessengerEXT debugMessenger;
     VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -95,7 +96,7 @@ private:
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
-            drawFrame(); // 우리가 작성했던 그 렌더링 함수
+            drawFrame(); // 작성한 렌더링 함수
         }
         
         // 창이 닫혀도 GPU가 작업 중일 수 있으므로 완전히 끝날 때까지 대기
@@ -124,7 +125,6 @@ private:
 
     // Vulkan 인스턴스 생성 및 검증 계층 활성화
     void createInstance() {
-        VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
         if (enableValidationLayers) {
@@ -147,7 +147,6 @@ private:
     // 디버그 메신저 생성 및 연결
     void setupDebugMessenger() {
         VkDebugUtilsMessengerEXT debugMessenger;
-
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         // 어떤 종류의 메시지(경고, 에러 등)를 받을지 설정
@@ -169,6 +168,7 @@ private:
 
     // 서피스 생성
     void createSurface() {
+        // 파라미터: (Vulkan 인스턴스, GLFW 창 객체 포인터, 커스텀 할당자, 생성된 Surface 핸들 저장용 변수)
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
             throw std::runtime_error("Window Surface 생성에 실패했습니다!");
         }
@@ -176,7 +176,71 @@ private:
 
     // 물리적 기기 선택
     void pickPhysicalDevice() {
-        //
+        // 사용 가능한 GPU 목록을 가져와서 적합한 GPU를 선택하는 로직 구현
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+        if (deviceCount == 0) {
+            throw std::runtime_error("Vulkan을 지원하는 GPU를 찾을 수 없습니다!");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        // 평가 및 선택 코드
+        // 각 GPU를 순회하며 평가
+        for (const auto& device : devices) {
+            if (isDeviceSuitable(device)) {
+                physicalDevice = device;
+                break; // 적합한 첫 번째 기기를 선택
+            }
+        }
+
+        if (physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("적합한 GPU를 찾지 못했습니다!");
+        }
+
+        // -----------------------------------------------------
+
+    }
+
+    // 기기 평가 함수 구현부
+    bool isDeviceSuitable(VkPhysicalDevice device) {
+        // 1. 기기의 기본 속성 및 지원하는 기능 조회
+        VkPhysicalDeviceProperties deviceProperties;
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+        
+        // 외장 그래픽 카드인지 확인 (옵션이지만 권장됨)
+        bool isDiscrete = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+        
+        // 2-1. 큐 패밀리 지원 여부 확인
+        bool hasGraphicsQueue = false;
+        uint32_t queueFamilyIndex = 0;
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+        
+        uint32_t i = 0;
+        for (const auto& queueFamily : queueFamilies) {
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                hasGraphicsQueue = true;
+                queueFamilyIndex = i;
+                break;
+            }
+            i++;
+        }
+
+        // 2-2. 큐 패밀리가 화면 출력(Present)을 지원하는지 검사
+        VkBool32 presentSupport = false;
+        if (hasGraphicsQueue) {
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, &presentSupport);
+        }
+        
+        // 외장 그래픽이며 그래픽스 큐를 지원하면서 화면 출력을 지원하면 적합하다고 판정
+        return isDiscrete && hasGraphicsQueue && presentSupport;
     }
 };
 
