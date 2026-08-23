@@ -77,19 +77,19 @@ private:
 
     void initVulkan() {
         // 객체 간의 의존성 때문에 이 순서가 바뀌면 안 됩니다!
-        createInstance();
-        setupDebugMessenger();
+        createInstance();            // Vulkan 인스턴스 생성
+        setupDebugMessenger();       // 디버그 메신저 생성
         createSurface();             // 물리적 기기 평가 전에 서피스가 있어야 함
         pickPhysicalDevice();        // 서피스 지원 여부 확인
         createLogicalDevice();       // 선택된 기기를 바탕으로 큐 생성
         createSwapChain();           // 큐와 서피스 기반으로 스왑체인 생성
-        createImageViews();
-        createRenderPass();
+        createImageViews();          // 스왑체인 이미지에 대한 뷰 생성
+        createRenderPass();          // 렌더 패스 생성
         createGraphicsPipeline();    // 렌더 패스가 있어야 파이프라인 생성 가능
         createFramebuffers();        // 파이프라인(렌더패스)과 이미지 뷰가 있어야 함
-        createCommandPool();
+        createCommandPool();         // 커맨드 풀 생성
         createCommandBuffer();       // 풀이 있어야 버퍼 할당 가능
-        createSyncObjects();
+        createSyncObjects();         // 동기화 객체 생성
     }
 
     void mainLoop() {
@@ -172,6 +172,11 @@ private:
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
             throw std::runtime_error("Window Surface 생성에 실패했습니다!");
         }
+    }
+
+    // 물리적 기기 선택
+    void pickPhysicalDevice() {
+        //
     }
 };
 
