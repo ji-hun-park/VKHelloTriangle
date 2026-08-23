@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include <algorithm>
 
 // 검증 계층 활성화 여부를 결정하는 플래그 정의
 #ifdef NDEBUG
@@ -61,6 +62,9 @@ private:
     VkQueue graphicsQueue;
     VkQueue presentQueue;
     VkSwapchainKHR swapChain;
+    std::vector<VkImage> swapChainImages;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
     // ... (이미지 뷰, 렌더패스, 파이프라인, 프레임버퍼 등 멤버 변수 선언)
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
@@ -73,6 +77,7 @@ private:
     VkDeviceQueueCreateInfo queueCreateInfo{};
     VkPhysicalDeviceFeatures deviceFeatures{}; // 현재는 특별히 활성화할 기능이 없으므로 빈 상태로 둡니다.
     VkDeviceCreateInfo createDeviceInfo{};
+    VkSwapchainCreateInfoKHR createSwapchainInfo{};
 
     // ----------------------------------------------------
 
@@ -269,9 +274,12 @@ private:
         // 2번에서 만든 기기 기능 연결
         createDeviceInfo.pEnabledFeatures = &deviceFeatures;
 
-        // 활성화할 기기 확장(Device Extensions) 지정 
-        // (나중에 화면 출력을 위해 VK_KHR_swapchain 확장을 여기에 추가하게 됩니다)
-        createDeviceInfo.enabledExtensionCount = 0;
+        // 활성화할 기기 확장(Device Extensions) 지정
+        const std::vector<const char*> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+        createDeviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+        createDeviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
         // (참고) 최신 Vulkan에서는 기기 레벨의 Validation Layers가 폐지되어 
         // 인스턴스 레벨의 설정을 따르지만, 구형 드라이버 호환성을 위해 
@@ -291,7 +299,110 @@ private:
         // 생성된 논리적 기기에서 그래픽스 큐 핸들 가져오기
         // 파라미터: (논리적 기기, 큐 패밀리 인덱스, 큐 인덱스, 반환받을 큐 핸들 변수)
         // 큐 인덱스는 0부터 시작하며, 우리는 1개만 만들었으므로 0을 넘깁니다.
+        // 큐(graphicsQueue)는 논리적 기기가 파괴될 때 함께 소멸하므로 따로 해제할 필요가 없음
         vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &graphicsQueue);
+    }
+
+    // 스왑 체인 생성
+    void createSwapChain() {
+        // 1. 스왑 체인 지원 정보 확인 (Capabilities, Formats, Present Modes)
+        VkSurfaceCapabilitiesKHR capabilities;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilities);
+
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
+        std::vector<VkSurfaceFormatKHR> formats(formatCount);
+        if (formatCount != 0) {
+            vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data());
+        }
+
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
+        std::vector<VkPresentModeKHR> presentModes(presentModeCount);
+        if (presentModeCount != 0) {
+            vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
+        }
+
+        // 2. 표면 형식(Surface Format) 선택
+        // 기본값으로는 첫 번째 형식을 선택하고, 최적의 형식(SRGB)이 있는지 찾습니다.
+        VkSurfaceFormatKHR surfaceFormat = formats[0];
+        for (const auto& availableFormat : formats) {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                surfaceFormat = availableFormat;
+                break;
+            }
+        }
+
+        // 3. 프레젠테이션 모드(Presentation Mode) 선택
+        // VK_PRESENT_MODE_FIFO_KHR는 수직 동기화(V-Sync)와 유사하며 항상 지원이 보장됩니다.
+        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        for (const auto& availablePresentMode : presentModes) {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) { // 삼중 버퍼링(Mailbox) 선호
+                presentMode = availablePresentMode;
+                break;
+            }
+        }
+
+        // 4. 해상도(Extent) 선택
+        VkExtent2D extent;
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            extent = capabilities.currentExtent; // 창 관리자가 지정한 크기 사용
+        } else {
+            // GLFW에서 픽셀 단위의 창 크기를 가져옵니다. (레티나 디스플레이 등 대응)
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            extent = {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            };
+
+            // 지원하는 최소/최대 해상도 범위 내로 제한
+            extent.width = std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            extent.height = std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        }
+
+        // 5. 스왑 체인 이미지 개수 결정 (최소 개수보다 1개 더 많게 설정하여 대기 시간 감소)
+        uint32_t imageCount = capabilities.minImageCount + 1;
+        if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
+            imageCount = capabilities.maxImageCount; // 최대 개수를 초과하지 않도록 제한
+        }
+
+        // 6. 스왑 체인 생성 정보 구조체 채우기
+        createSwapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createSwapchainInfo.surface = surface;
+        createSwapchainInfo.minImageCount = imageCount;
+        createSwapchainInfo.imageFormat = surfaceFormat.format;
+        createSwapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
+        createSwapchainInfo.imageExtent = extent;
+        createSwapchainInfo.imageArrayLayers = 1; // VR이 아닌 이상 항상 1
+        createSwapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // 직접 렌더링할 대상
+
+        // 그래픽스 큐와 프레젠테이션 큐가 같다고 가정하여 독점 모드(EXCLUSIVE) 사용
+        // (만약 두 큐가 다르다면 CONCURRENT 모드를 사용해야 합니다)
+        createSwapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        
+        // 현재 표면의 변환 상태 유지 (예: 90도 회전 안 함)
+        createSwapchainInfo.preTransform = capabilities.currentTransform;
+        
+        // 다른 창과의 알파 블렌딩 적용 안 함
+        createSwapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        
+        createSwapchainInfo.presentMode = presentMode;
+        createSwapchainInfo.clipped = VK_TRUE; // 다른 창에 가려진 픽셀 렌더링 무시
+        createSwapchainInfo.oldSwapchain = VK_NULL_HANDLE;
+
+        // 스왑 체인 생성
+        if (vkCreateSwapchainKHR(device, &createSwapchainInfo, nullptr, &swapChain) != VK_SUCCESS) {
+            throw std::runtime_error("스왑 체인 생성에 실패했습니다!");
+        }
+
+        // 향후 참조하기 위해 멤버 변수에 저장
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+        swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+        swapChainImageFormat = surfaceFormat.format;
+        swapChainExtent = extent;
     }
 };
 
