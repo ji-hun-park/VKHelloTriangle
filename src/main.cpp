@@ -65,6 +65,7 @@ private:
     std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
+    std::vector<VkImageView> swapChainImageViews;
     // ... (이미지 뷰, 렌더패스, 파이프라인, 프레임버퍼 등 멤버 변수 선언)
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
@@ -121,7 +122,13 @@ private:
         vkDestroyFence(device, inFlightFence, nullptr);
         
         vkDestroyCommandPool(device, commandPool, nullptr);
-        // ... (프레임버퍼, 파이프라인, 렌더패스, 스왑체인 파괴)
+        // ... (프레임버퍼, 파이프라인, 렌더패스 파괴)
+
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
         
         vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -403,6 +410,38 @@ private:
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
+    }
+
+    // 스왑체인 이미지 뷰 생성
+    void createImageViews() {
+        swapChainImageViews.resize(swapChainImages.size());
+
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = swapChainImages[i];
+            
+            // 이미지 뷰의 타입과 포맷 설정 (1D, 2D, 3D, 큐브 맵 등)
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createInfo.format = swapChainImageFormat;
+            
+            // 색상 채널 매핑 설정 (기본값 사용)
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            
+            // 이미지의 어떤 용도(Color, Depth 등)와 밉맵/레이어 범위를 사용할지 설정
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createInfo.subresourceRange.baseMipLevel = 0;
+            createInfo.subresourceRange.levelCount = 1;
+            createInfo.subresourceRange.baseArrayLayer = 0;
+            createInfo.subresourceRange.layerCount = 1;
+            
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+                throw std::runtime_error("이미지 뷰 생성에 실패했습니다!");
+            }
+        }
     }
 };
 
