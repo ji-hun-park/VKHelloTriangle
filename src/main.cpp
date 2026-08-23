@@ -142,7 +142,14 @@ private:
         vkDestroyFence(device, inFlightFence, nullptr);
         
         vkDestroyCommandPool(device, commandPool, nullptr);
-        // ... (프레임버퍼, 파이프라인, 렌더패스 파괴)
+
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
@@ -152,7 +159,15 @@ private:
         
         vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
+        
         // 디버그 메신저 파괴
+        if (enableValidationLayers) {
+            auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+            if (func != nullptr) {
+                func(instance, debugMessenger, nullptr);
+            }
+        }
+        
         vkDestroyInstance(instance, nullptr);
 
         glfwDestroyWindow(window);
@@ -880,7 +895,7 @@ private:
         // 만약 이미지를 얻어오기 전에 리셋했는데 화면 리사이즈 등으로 실패하면 데드락(Deadlock)에 빠질 수 있습니다.
         vkResetFences(device, 1, &inFlightFence);
 
-        // 3. 커맨드 버퍼 초기화 및 그리기 명령 재기록 (이전 단계에서 만든 함수 활용)
+        // 3. 커맨드 버퍼 초기화 및 그리기 명령 재기록
         vkResetCommandBuffer(commandBuffer, 0);
         recordCommandBuffer(commandBuffer, imageIndex);
 
