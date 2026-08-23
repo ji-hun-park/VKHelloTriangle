@@ -724,7 +724,7 @@ private:
 
         // 생명 주기 관리
         // 프레임버퍼는 스왑체인의 이미지 해상도(swapChainExtent)에 직접적으로 의존
-        // 만약 사용자가 창(Window)의 크기를 마우스로 드래그해서 조절하면 스왑체인을 파괴하고 새 해상도로 다시 만들어야 하는데
+        // 만약 사용자가 창(Window)의 크기를 마우스로 드래그해서 조절하면 스왑체인을 파괴하고 새 해상도로 다시 만들어야 하는데,
         // 이때 기존 프레임버퍼들도 모조리 파괴(vkDestroyFramebuffer)한 뒤 새로운 스왑체인 이미지 뷰를 바탕으로 다시 생성해야 함
     }
 
@@ -771,6 +771,31 @@ private:
         // 생명 주기 관리
         // 커맨드 풀이 파괴(vkDestroyCommandPool)되면, 그 풀에서 할당받았던 모든 커맨드 버퍼도 자동으로 메모리에서 해제됨
         // 따라서 프로그램 종료 시 커맨드 버퍼를 일일이 해제할 필요 없이 풀 하나만 파괴하면 됨
+    }
+
+    // 동기화 객체 생성 함수
+    void createSyncObjects() {
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        
+        // [매우 중요한 트릭]
+        // 펜스는 기본적으로 '닫힌(Unsignaled)' 상태로 생성됩니다.
+        // 만약 첫 프레임을 그릴 때 펜스가 열리길 기다린다면, 
+        // 아무 작업도 하지 않은 GPU가 펜스를 열어줄 리 없으므로 프로그램이 영원히 멈춥니다(Deadlock).
+        // 따라서 처음 생성할 때는 '열린(Signaled)' 상태로 만들어, 첫 프레임이 무사히 통과하도록 합니다.
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        // 객체 생성 (성능을 위해 여러 프레임을 동시에 처리한다면, 
+        // 프레임 개수만큼 이 객체들을 배열로 만들어야 합니다)
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+            vkCreateFence(device, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
+            
+            throw std::runtime_error("동기화 객체 생성에 실패했습니다!");
+        }
     }
 };
 
