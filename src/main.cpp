@@ -726,6 +726,28 @@ private:
         // 만약 사용자가 창(Window)의 크기를 마우스로 드래그해서 조절하면 스왑체인을 파괴하고 새 해상도로 다시 만들어야 하는데
         // 이때 기존 프레임버퍼들도 모조리 파괴(vkDestroyFramebuffer)한 뒤 새로운 스왑체인 이미지 뷰를 바탕으로 다시 생성해야 함
     }
+
+    // 커맨드 풀 생성 함수
+    void createCommandPool() {
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        
+        // 이 풀에서 만들어진 커맨드 버퍼들은 '그래픽스 큐'에 제출될 것임을 명시합니다.
+        poolInfo.queueFamilyIndex = queueFamilyIndex; // (물리적 기기 선택 단계에서 찾았던 큐 패밀리 인덱스)
+        
+        // 플래그(Flags) 설정 (매우 중요)
+        // VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT: 
+        // 커맨드 버퍼를 풀 단위가 아니라 개별적으로 초기화(Reset)하고 다시 기록할 수 있게 허용합니다.
+        // 매 프레임마다 명령을 새로 기록해야 하는 렌더링 루프에서 필수적입니다.
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+        if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+            throw std::runtime_error("커맨드 풀 생성에 실패했습니다!");
+        }
+    }
+
+    // 커맨드 버퍼 할당 함수
+    void createCommandBuffer() {}
 };
 
 int main() {
