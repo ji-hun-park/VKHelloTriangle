@@ -121,6 +121,8 @@ private:
     }
 
     // 각 create 함수들의 세부 구현부
+
+    // Vulkan 인스턴스 생성 및 검증 계층 활성화
     void createInstance() {
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -142,6 +144,7 @@ private:
         }
     }
 
+    // 디버그 메신저 생성 및 연결
     void setupDebugMessenger() {
         VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -161,6 +164,13 @@ private:
             }
         } else {
             throw std::runtime_error("Extension not present");
+        }
+    }
+
+    // 서피스 생성
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+            throw std::runtime_error("Window Surface 생성에 실패했습니다!");
         }
     }
 };
