@@ -53,10 +53,10 @@ private:
 
     // --- Vulkan 객체 핸들 변수 ---
     VkInstance instance;
-    VkInstanceCreateInfo createInfo{};
     VkDebugUtilsMessengerEXT debugMessenger;
     VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    uint32_t queueFamilyIndex = 0;
     VkDevice device;
     VkQueue graphicsQueue;
     VkQueue presentQueue;
@@ -67,6 +67,12 @@ private:
     VkSemaphore imageAvailableSemaphore;
     VkSemaphore renderFinishedSemaphore;
     VkFence inFlightFence;
+
+    // Vulkan 구조체 초기화
+    VkInstanceCreateInfo createInfo{};
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    VkPhysicalDeviceFeatures deviceFeatures{}; // 현재는 특별히 활성화할 기능이 없으므로 빈 상태로 둡니다.
+    VkDeviceCreateInfo createDeviceInfo{};
 
     // ----------------------------------------------------
 
@@ -199,9 +205,6 @@ private:
         if (physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("적합한 GPU를 찾지 못했습니다!");
         }
-
-        // -----------------------------------------------------
-
     }
 
     // 기기 평가 함수 구현부
@@ -217,7 +220,6 @@ private:
         
         // 2-1. 큐 패밀리 지원 여부 확인
         bool hasGraphicsQueue = false;
-        uint32_t queueFamilyIndex = 0;
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
@@ -241,6 +243,55 @@ private:
         
         // 외장 그래픽이며 그래픽스 큐를 지원하면서 화면 출력을 지원하면 적합하다고 판정
         return isDiscrete && hasGraphicsQueue && presentSupport;
+    }
+
+    void createLogicalDevice() {
+        // 생성할 큐 지정하기
+        uint32_t graphicsFamilyIndex = queueFamilyIndex; // 앞서 찾은 그래픽스 큐 패밀리 인덱스
+
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = graphicsFamilyIndex;
+
+        // 만들고자 하는 큐의 개수
+        queueCreateInfo.queueCount = 1;
+
+        // 큐의 우선순위 지정 (필수, 0.0f ~ 1.0f 사이의 실수 값)
+        float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        // 논리적 기기 설정
+        createDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+        // 1번에서 만든 큐 생성 정보 연결
+        createDeviceInfo.pQueueCreateInfos = &queueCreateInfo;
+        createDeviceInfo.queueCreateInfoCount = 1;
+
+        // 2번에서 만든 기기 기능 연결
+        createDeviceInfo.pEnabledFeatures = &deviceFeatures;
+
+        // 활성화할 기기 확장(Device Extensions) 지정 
+        // (나중에 화면 출력을 위해 VK_KHR_swapchain 확장을 여기에 추가하게 됩니다)
+        createDeviceInfo.enabledExtensionCount = 0;
+
+        // (참고) 최신 Vulkan에서는 기기 레벨의 Validation Layers가 폐지되어 
+        // 인스턴스 레벨의 설정을 따르지만, 구형 드라이버 호환성을 위해 
+        // 예전처럼 layer 이름을 명시해 주는 것이 좋습니다.
+        if (enableValidationLayers) {
+            createDeviceInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createDeviceInfo.ppEnabledLayerNames = validationLayers.data();
+        } else {
+            createDeviceInfo.enabledLayerCount = 0;
+        }
+
+        // 최종적으로 논리적 기기 생성
+        if (vkCreateDevice(physicalDevice, &createDeviceInfo, nullptr, &device) != VK_SUCCESS) {
+            throw std::runtime_error("논리적 기기 생성에 실패했습니다!");
+        }
+
+        // 생성된 논리적 기기에서 그래픽스 큐 핸들 가져오기
+        // 파라미터: (논리적 기기, 큐 패밀리 인덱스, 큐 인덱스, 반환받을 큐 핸들 변수)
+        // 큐 인덱스는 0부터 시작하며, 우리는 1개만 만들었으므로 0을 넘깁니다.
+        vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &graphicsQueue);
     }
 };
 
