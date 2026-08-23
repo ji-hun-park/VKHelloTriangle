@@ -66,6 +66,7 @@ private:
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
+    VkRenderPass renderPass;
     // ... (이미지 뷰, 렌더패스, 파이프라인, 프레임버퍼 등 멤버 변수 선언)
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
@@ -79,6 +80,10 @@ private:
     VkPhysicalDeviceFeatures deviceFeatures{}; // 현재는 특별히 활성화할 기능이 없으므로 빈 상태로 둡니다.
     VkDeviceCreateInfo createDeviceInfo{};
     VkSwapchainCreateInfoKHR createSwapchainInfo{};
+    VkAttachmentDescription colorAttachment{};
+    VkAttachmentReference colorAttachmentRef{};
+    VkSubpassDependency dependency{};
+    VkRenderPassCreateInfo renderPassInfo{};
 
     // ----------------------------------------------------
 
@@ -257,6 +262,7 @@ private:
         return isDiscrete && hasGraphicsQueue && presentSupport;
     }
 
+    // 논리적 기기 생성
     void createLogicalDevice() {
         // 생성할 큐 지정하기
         uint32_t graphicsFamilyIndex = queueFamilyIndex; // 앞서 찾은 그래픽스 큐 패밀리 인덱스
@@ -417,30 +423,91 @@ private:
         swapChainImageViews.resize(swapChainImages.size());
 
         for (size_t i = 0; i < swapChainImages.size(); i++) {
-            VkImageViewCreateInfo createInfo{};
-            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            createInfo.image = swapChainImages[i];
+            VkImageViewCreateInfo createImageViewInfo{};
+            createImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createImageViewInfo.image = swapChainImages[i];
             
             // 이미지 뷰의 타입과 포맷 설정 (1D, 2D, 3D, 큐브 맵 등)
-            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            createInfo.format = swapChainImageFormat;
+            createImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createImageViewInfo.format = swapChainImageFormat;
             
             // 색상 채널 매핑 설정 (기본값 사용)
-            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createImageViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createImageViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createImageViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createImageViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
             
             // 이미지의 어떤 용도(Color, Depth 등)와 밉맵/레이어 범위를 사용할지 설정
-            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            createInfo.subresourceRange.baseMipLevel = 0;
-            createInfo.subresourceRange.levelCount = 1;
-            createInfo.subresourceRange.baseArrayLayer = 0;
-            createInfo.subresourceRange.layerCount = 1;
+            createImageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createImageViewInfo.subresourceRange.baseMipLevel = 0;
+            createImageViewInfo.subresourceRange.levelCount = 1;
+            createImageViewInfo.subresourceRange.baseArrayLayer = 0;
+            createImageViewInfo.subresourceRange.layerCount = 1;
             
-            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+            if (vkCreateImageView(device, &createImageViewInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
                 throw std::runtime_error("이미지 뷰 생성에 실패했습니다!");
             }
+        }
+    }
+
+    // 렌더 패스 생성
+    void createRenderPass() {
+        // 1. 색상 첨부물 정의 (Color Attachment)
+        // 스왑체인 이미지의 형식과 일치해야 합니다. (예: VK_FORMAT_B8G8R8A8_SRGB)
+        colorAttachment.format = swapChainImageFormat; 
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // 안티앨리어싱(멀티샘플링) 없음
+
+        // 렌더링 시작 시: 화면을 단색으로 싹 지움 (Clear)
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        // 렌더링 종료 시: 그려진 결과를 메모리에 저장 (Store)해서 화면에 보일 수 있게 함
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        // 스텐실 데이터는 사용하지 않으므로 무시
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        // 렌더링 시작 전 레이아웃: 이전 상태는 신경 쓰지 않음 (어차피 Clear 할 거니까)
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        // 렌더링 종료 후 레이아웃: 모니터에 출력(Present)하기 최적화된 상태로 변환
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+
+        // 2. 서브패스 및 첨부물 참조 정의 (Subpass & Attachment Reference)
+        colorAttachmentRef.attachment = 0; // 위에 정의한 첨부물 배열의 인덱스 (0번째)
+        // 이 서브패스가 실행되는 동안 이미지는 '색상 첨부물에 최적화된 레이아웃' 상태를 유지해야 함
+        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; // 그래픽스 렌더링 용도
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef; // 서브패스에 참조 연결
+
+
+        // 3. 서브패스 의존성 설정 (Subpass Dependency)
+        // src: 렌더 패스 시작 전의 외부 암시적 서브패스 (스왑체인 이미지 획득 과정)
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        // dst: 우리가 방금 만든 0번째 서브패스
+        dependency.dstSubpass = 0;
+
+        // 언제 기다릴 것인가? 색상 첨부물에 무언가 출력하려고 할 때
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0; // 이 시점까지는 아무 메모리 접근도 일어나지 않음
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; // 색상 쓰기 권한이 필요함
+
+
+        // 4. 렌더 패스 최종 생성
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
+
+        // 논리적 기기(device)를 통해 렌더 패스 생성
+        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+            throw std::runtime_error("렌더 패스 생성에 실패했습니다!");
         }
     }
 };
