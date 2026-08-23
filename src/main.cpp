@@ -141,6 +141,28 @@ private:
             throw std::runtime_error("failed to create instance!");
         }
     }
+
+    void setupDebugMessenger() {
+        VkDebugUtilsMessengerEXT debugMessenger;
+
+        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+        debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        // 어떤 종류의 메시지(경고, 에러 등)를 받을지 설정
+        debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        // 작성한 콜백 함수 연결
+        debugCreateInfo.pfnUserCallback = debugCallback; 
+
+        // 확장 함수 포인터 로드 및 호출
+        auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        if (func != nullptr) {
+            if (func(instance, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+                throw std::runtime_error("failed to set up debug messenger!");
+            }
+        } else {
+            throw std::runtime_error("Extension not present");
+        }
+    }
 };
 
 int main() {
