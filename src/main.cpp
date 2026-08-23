@@ -5,6 +5,39 @@
 #include <stdexcept>
 #include <vector>
 
+// 검증 계층 활성화 여부를 결정하는 플래그 정의
+#ifdef NDEBUG
+    const bool enableValidationLayers = false;
+#else
+    const bool enableValidationLayers = true;
+#endif
+
+// 활성화할 검증 계층 이름
+const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+};
+
+// 디버그 콜백을 사용하기 위한 필수 확장 기능
+const std::vector<const char*> extensions = {
+    VK_EXT_DEBUG_UTILS_EXTENSION_NAME // "VK_EXT_debug_utils"와 동일
+};
+
+// Vulkan 디버그 콜백 함수 정의
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData) {
+
+    // 오류(Error)나 경고(Warning) 메시지만 콘솔에 출력하도록 필터링
+    if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        std::cerr << "Validation Layer: " << pCallbackData->pMessage << std::endl;
+    }
+
+    // 콜백이 무조건 VK_FALSE를 반환해야 Vulkan 호출이 취소되지 않고 계속 진행됩니다.
+    return VK_FALSE;
+}
+
 class HelloTriangleApplication {
 public:
     void run() {
