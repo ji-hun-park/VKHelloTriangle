@@ -91,7 +91,8 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
     VkRenderPass renderPass;
-    // ... (이미지 뷰, 렌더패스, 파이프라인, 프레임버퍼 등 멤버 변수 선언)
+    VkPipelineLayout pipelineLayout;
+    VkPipeline graphicsPipeline;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
     VkSemaphore imageAvailableSemaphore;
@@ -563,24 +564,122 @@ private:
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, device);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode, device);
 
-        // 버텍스 셰이더 스테이지 설정
+        // 3. 버텍스 셰이더 스테이지 설정
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
         vertShaderStageInfo.module = vertShaderModule;
         vertShaderStageInfo.pName = "main"; // 셰이더 코드 내의 진입점(Entry point) 함수 이름
 
-        // 프래그먼트 셰이더 스테이지 설정
+        // 4. 프래그먼트 셰이더 스테이지 설정
         VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
         fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         fragShaderStageInfo.module = fragShaderModule;
         fragShaderStageInfo.pName = "main";
 
-        // 두 스테이지를 배열로 묶음
+        // 5. 두 스테이지를 배열로 묶음
         VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-        // 3. 파이프라인 생성이 끝났다면 셰이더 모듈 파괴 (메모리 해제)
+        // 6. 정점 입력: 현재는 셰이더 안에 정점 좌표를 하드코딩했으므로 메모리에서 읽어올 데이터가 없습니다.
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+        // 7. 입력 조립: 전달된 정점들을 어떤 기하학적 도형으로 그릴지 결정합니다. (삼각형)
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // 8. 뷰포트(Viewport)와 시저(Scissor) 설정: 실제 렌더링 시점에 동적으로 설정할 것이므로 여기서는 더미 값으로 초기화
+        // 동적 상태(Dynamic State)로 지정할 항목 배열
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        // 뷰포트와 시저의 개수만 파이프라인에 알려줍니다 (실제 크기 값은 렌더링 시점에 세팅함)
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        // 9. 래스터라이저(Rasterizer) 설정: 버텍스 셰이더를 거친 3D 도형을 화면의 2D 픽셀 단위로 쪼개는 방식
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE; // 화면 밖의 정점을 잘라냄(Discard)
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        // 면 채우기(FILL), 선 그리기(LINE), 점 찍기(POINT) 중 선택
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL; 
+        rasterizer.lineWidth = 1.0f;
+        // 후면 잘라내기(Backface Culling) 설정 (성능 향상을 위해 보이지 않는 뒷면을 그리지 않음)
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; // 시계 방향으로 그려진 면을 앞면으로 간주
+
+        // 10. 멀티샘플링 (안티앨리어싱 - 지금은 비활성화)
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // 11. 컬러 블렌딩 (새로 칠할 픽셀 색상과 기존 화면의 색상을 어떻게 섞을지 결정 - 지금은 덮어쓰기)
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE; 
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment; // 위에 만든 Attachment 설정 연결
+
+        // 12. 파이프라인 레이아웃 생성 (셰이더에서 사용할 유니폼 변수, 푸시 상수 등을 정의, 지금은 빈 상태로 생성하지만 객체 자체는 반드시 필요함)
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 0; 
+        pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("파이프라인 레이아웃 생성 실패!");
+        }
+
+        // 13. 최종 그래픽스 파이프라인 생성 (Creation)
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+        // 13-a. 셰이더 스테이지 연결
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+
+        // 13-b. 고정 기능 상태 연결
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+
+        // 13-c. 파이프라인 레이아웃 연결
+        pipelineInfo.layout = pipelineLayout;
+
+        // 13-d. 렌더 패스 연결
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0; // 사용할 서브패스의 인덱스
+
+        // 13-e. 최종적으로 파이프라인 생성
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("그래픽스 파이프라인 생성 실패!");
+        }
+
+        // 14. 파이프라인 생성이 끝났다면 셰이더 모듈 파괴 (메모리 해제)
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
