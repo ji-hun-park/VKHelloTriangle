@@ -98,21 +98,6 @@ private:
     VkSemaphore renderFinishedSemaphore;
     VkFence inFlightFence;
 
-    // Vulkan 구조체 초기화
-    VkInstanceCreateInfo createInfo{};
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    VkPhysicalDeviceFeatures deviceFeatures{}; // 현재는 특별히 활성화할 기능이 없으므로 빈 상태로 둡니다.
-    VkDeviceCreateInfo createDeviceInfo{};
-    VkSwapchainCreateInfoKHR createSwapchainInfo{};
-    VkAttachmentDescription colorAttachment{};
-    VkAttachmentReference colorAttachmentRef{};
-    VkSubpassDependency dependency{};
-    VkRenderPassCreateInfo renderPassInfo{};
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-
-    // ----------------------------------------------------
-
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -174,6 +159,7 @@ private:
 
     // Vulkan 인스턴스 생성 및 검증 계층 활성화
     void createInstance() {
+        VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
         if (enableValidationLayers) {
@@ -293,6 +279,7 @@ private:
         // 생성할 큐 지정하기
         uint32_t graphicsFamilyIndex = queueFamilyIndex; // 앞서 찾은 그래픽스 큐 패밀리 인덱스
 
+        VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queueCreateInfo.queueFamilyIndex = graphicsFamilyIndex;
 
@@ -303,7 +290,11 @@ private:
         float queuePriority = 1.0f;
         queueCreateInfo.pQueuePriorities = &queuePriority;
 
+        // 기기 기능(Features) 지정하기
+        VkPhysicalDeviceFeatures deviceFeatures{}; // 현재는 특별히 활성화할 기능이 없으므로 빈 상태로 둠
+
         // 논리적 기기 설정
+        VkDeviceCreateInfo createDeviceInfo{};
         createDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
         // 1번에서 만든 큐 생성 정보 연결
@@ -408,6 +399,7 @@ private:
         }
 
         // 6. 스왑 체인 생성 정보 구조체 채우기
+        VkSwapchainCreateInfoKHR createSwapchainInfo{};
         createSwapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         createSwapchainInfo.surface = surface;
         createSwapchainInfo.minImageCount = imageCount;
@@ -479,6 +471,7 @@ private:
     // 렌더 패스 생성
     void createRenderPass() {
         // 1. 색상 첨부물 정의 (Color Attachment)
+        VkAttachmentDescription colorAttachment{};
         // 스왑체인 이미지의 형식과 일치해야 합니다. (예: VK_FORMAT_B8G8R8A8_SRGB)
         colorAttachment.format = swapChainImageFormat; 
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // 안티앨리어싱(멀티샘플링) 없음
@@ -499,6 +492,7 @@ private:
 
 
         // 2. 서브패스 및 첨부물 참조 정의 (Subpass & Attachment Reference)
+        VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0; // 위에 정의한 첨부물 배열의 인덱스 (0번째)
         // 이 서브패스가 실행되는 동안 이미지는 '색상 첨부물에 최적화된 레이아웃' 상태를 유지해야 함
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -510,6 +504,7 @@ private:
 
 
         // 3. 서브패스 의존성 설정 (Subpass Dependency)
+        VkSubpassDependency dependency{};
         // src: 렌더 패스 시작 전의 외부 암시적 서브패스 (스왑체인 이미지 획득 과정)
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         // dst: 우리가 방금 만든 0번째 서브패스
@@ -522,6 +517,7 @@ private:
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; // 색상 쓰기 권한이 필요함
 
 
+        VkRenderPassCreateInfo renderPassInfo{};
         // 4. 렌더 패스 최종 생성
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
@@ -559,7 +555,34 @@ private:
 
     // 그래픽스 파이프라인 생성 함수
     void createGraphicsPipeline() {
-        //
+        // 1. 파일 읽기
+        auto vertShaderCode = readFile("vert.spv");
+        auto fragShaderCode = readFile("frag.spv");
+
+        // 2. 셰이더 모듈 생성
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, device);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode, device);
+
+        // 버텍스 셰이더 스테이지 설정
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main"; // 셰이더 코드 내의 진입점(Entry point) 함수 이름
+
+        // 프래그먼트 셰이더 스테이지 설정
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        // 두 스테이지를 배열로 묶음
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        // 3. 파이프라인 생성이 끝났다면 셰이더 모듈 파괴 (메모리 해제)
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 };
 
