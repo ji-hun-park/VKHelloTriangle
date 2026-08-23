@@ -120,7 +120,27 @@ private:
         glfwTerminate();
     }
 
-    // ... (각 create 함수들의 세부 구현부) ...
+    // 각 create 함수들의 세부 구현부
+    void createInstance() {
+        VkInstanceCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+
+        if (enableValidationLayers) {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+            
+            // 확장 기능 추가 (GLFW 요구 확장 기능 + 디버그 확장 기능)
+            createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+            createInfo.ppEnabledExtensionNames = extensions.data();
+        } else {
+            createInfo.enabledLayerCount = 0;
+            // 릴리즈 빌드용 확장 기능만 추가
+        }
+
+        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create instance!");
+        }
+    }
 };
 
 int main() {
