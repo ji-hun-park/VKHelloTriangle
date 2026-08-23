@@ -1,4 +1,4 @@
-﻿#version 450
+#version 450
 
 // 버텍스 셰이더에서 넘어온 색상 데이터 (location 번호가 같아야 연결됩니다)
 layout(location = 0) in vec3 fragColor;

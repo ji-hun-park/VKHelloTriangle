@@ -1,4 +1,4 @@
-﻿#version 450 // GLSL 4.5 버전 사용 (Vulkan 표준)
+#version 450 // GLSL 4.5 버전 사용 (Vulkan 표준)
 
 // 삼각형의 세 꼭짓점 위치 (x, y)
 vec2 positions[3] = vec2[](
