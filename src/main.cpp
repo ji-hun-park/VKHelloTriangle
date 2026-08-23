@@ -1,10 +1,12 @@
 ﻿#define GLFW_INCLUDE_VULKAN
 #include "./glfw-3.5.1/include/GLFW/glfw3.h"
 #include "./1.4.357.0./include/vulkan/vulkan.h"
+#include <algorithm>
+#include <fstream>
 #include <iostream>
+#include <string>
 #include <stdexcept>
 #include <vector>
-#include <algorithm>
 
 // 검증 계층 활성화 여부를 결정하는 플래그 정의
 #ifdef NDEBUG
@@ -37,6 +39,28 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
     // 콜백이 무조건 VK_FALSE를 반환해야 Vulkan 호출이 취소되지 않고 계속 진행됩니다.
     return VK_FALSE;
+}
+
+// 바이너리 파일 읽기 함수 구현
+static std::vector<char> readFile(const std::string& filename) {
+    // std::ios::ate: 파일의 끝(At The End)에서 열어 파일 크기를 즉시 알 수 있게 함
+    // std::ios::binary: 텍스트 변환 없이 바이너리 데이터 그대로 읽기
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error(filename + " 파일을 여는 데 실패했습니다!");
+    }
+
+    // 현재 읽기 위치(파일 끝)를 통해 파일 크기 확인
+    size_t fileSize = (size_t) file.tellg();
+    std::vector<char> buffer(fileSize);
+
+    // 파일의 처음으로 돌아가서 한 번에 버퍼로 읽어오기
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+
+    file.close();
+    return buffer;
 }
 
 class HelloTriangleApplication {
