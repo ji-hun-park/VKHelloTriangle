@@ -200,6 +200,7 @@ private:
 
     // 디버그 메신저 생성 및 연결
     void setupDebugMessenger() {
+        if (!enableValidationLayers) return; // 릴리즈 모드 시 크래시 방지
         VkDebugUtilsMessengerEXT debugMessenger;
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -277,7 +278,7 @@ private:
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 hasGraphicsQueue = true;
-                queueFamilyIndex = i;
+                queueFamilyIndex = i; // 추후 후보 여러 개 선택 시 수정 필요! std::optional<uint32_t> 같은 구조체에 담아 반환하는 것이 안전함
                 break;
             }
             i++;
@@ -350,6 +351,7 @@ private:
         // 큐 인덱스는 0부터 시작하며, 우리는 1개만 만들었으므로 0을 넘깁니다.
         // 큐(graphicsQueue)는 논리적 기기가 파괴될 때 함께 소멸하므로 따로 해제할 필요가 없음
         vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &graphicsQueue);
+        vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &presentQueue);
     }
 
     // 스왑 체인 생성
@@ -792,6 +794,8 @@ private:
 
     // 동기화 객체 생성 함수
     void createSyncObjects() {
+        // 현재는 동기화 객체를 1세트만 있어 GPU가 화면을 그리는 동안 CPU는 vkWaitForFences에 갇힘
+        // 여러 프레임을 동시에 처리하고 싶다면 MAX_FRAMES_IN_FLIGHT 상수를 도입해 프레임 개수만큼 배열로 만들어야 함
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -883,6 +887,7 @@ private:
 
     // 렌더링 루프
     void drawFrame() {
+        // 아직 창 크기 변형에 대한 대응 처리 구현 안했음 주의!
         // 1. 이전 프레임 작업이 끝날 때까지 CPU 대기
         // 파라미터: (device, 펜스 개수, 펜스 배열, 모두 기다릴지 여부, 타임아웃 시간)
         vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
