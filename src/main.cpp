@@ -800,6 +800,72 @@ private:
         }
     }
 
+    // 커맨드 버퍼 기록 함수
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+        // 1. 커맨드 버퍼 기록 시작 (Begin)
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        
+        // 매 프레임마다 버퍼를 리셋하고 다시 기록할 것이므로 플래그 생략(0)
+        beginInfo.flags = 0; 
+        beginInfo.pInheritanceInfo = nullptr; // 보조 커맨드 버퍼용이므로 무시
+
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("커맨드 버퍼 기록 시작에 실패했습니다!");
+        }
+
+        // 2. 렌더 패스 시작 (Begin Render Pass)
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        
+        // 이전에 만든 렌더 패스와 스왑체인의 현재 이미지 인덱스에 맞는 프레임버퍼 연결
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+
+        // 렌더링이 일어날 화면 영역 지정 (일반적으로 스왑체인 전체 크기)
+        renderPassInfo.renderArea.offset = {0, 0};
+        renderPassInfo.renderArea.extent = swapChainExtent;
+
+        // 렌더 패스 시작 시 화면을 지울(Clear) 배경색 지정 (검은색에 불투명도 100%)
+        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+
+        // 인라인(Inline) 모드로 렌더 패스 명령 기록 시작
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // 3. 그래픽스 파이프라인 바인딩 (Bind Pipeline)
+        // VK_PIPELINE_BIND_POINT_GRAPHICS: 그래픽스 파이프라인임을 명시 (컴퓨트 파이프라인과 구분)
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+        // 4. 동적 상태 (Dynamic States) 설정
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapChainExtent.width);
+        viewport.height = static_cast<float>(swapChainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = swapChainExtent;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+        // 5. 그리기 명령 (Draw) 및 렌더 패스 종료
+        // 파라미터: (커맨드 버퍼, 정점 개수(3), 인스턴스 개수(1), 첫 정점 인덱스(0), 첫 인스턴스 인덱스(0))
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        // 렌더 패스 기록 종료
+        vkCmdEndRenderPass(commandBuffer);
+
+        // 커맨드 버퍼 기록 완료 (녹음 정지)
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("커맨드 버퍼 기록 종료에 실패했습니다!");
+        }
+    }
+
     // 렌더링 루프
     void drawFrame() {
         // 1. 이전 프레임 작업이 끝날 때까지 CPU 대기
