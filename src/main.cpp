@@ -721,6 +721,7 @@ private:
                 throw std::runtime_error("프레임버퍼 생성에 실패했습니다!");
             }
         }
+
         // 생명 주기 관리
         // 프레임버퍼는 스왑체인의 이미지 해상도(swapChainExtent)에 직접적으로 의존
         // 만약 사용자가 창(Window)의 크기를 마우스로 드래그해서 조절하면 스왑체인을 파괴하고 새 해상도로 다시 만들어야 하는데
@@ -747,7 +748,30 @@ private:
     }
 
     // 커맨드 버퍼 할당 함수
-    void createCommandBuffer() {}
+    void createCommandBuffer() {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        
+        // 명령을 할당받을 커맨드 풀 지정
+        allocInfo.commandPool = commandPool;
+        
+        // 버퍼 레벨(Level) 설정
+        // PRIMARY: 큐에 직접 제출할 수 있는 주(Main) 커맨드 버퍼입니다.
+        // SECONDARY: 큐에 직접 제출할 수는 없고, PRIMARY 버퍼 안에서 호출되어 실행되는 보조 버퍼입니다.
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        
+        // 할당받을 커맨드 버퍼의 개수
+        allocInfo.commandBufferCount = 1;
+
+        // vkAllocateCommandBuffers는 할당 성공 시 VK_SUCCESS를 반환합니다.
+        if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("커맨드 버퍼 할당에 실패했습니다!");
+        }
+
+        // 생명 주기 관리
+        // 커맨드 풀이 파괴(vkDestroyCommandPool)되면, 그 풀에서 할당받았던 모든 커맨드 버퍼도 자동으로 메모리에서 해제됨
+        // 따라서 프로그램 종료 시 커맨드 버퍼를 일일이 해제할 필요 없이 풀 하나만 파괴하면 됨
+    }
 };
 
 int main() {
