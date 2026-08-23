@@ -108,6 +108,8 @@ private:
     VkAttachmentReference colorAttachmentRef{};
     VkSubpassDependency dependency{};
     VkRenderPassCreateInfo renderPassInfo{};
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 
     // ----------------------------------------------------
 
@@ -533,6 +535,31 @@ private:
         if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
             throw std::runtime_error("렌더 패스 생성에 실패했습니다!");
         }
+    }
+
+    // 셰이더 모듈 생성 함수
+    VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice device) {
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        
+        // 바이트 코드의 크기 (바이트 단위)
+        createInfo.codeSize = code.size();
+        
+        // std::vector<char>의 데이터를 uint32_t 포인터로 캐스팅하여 전달
+        // (SPIR-V 바이트코드는 4바이트 단위의 명령어(uint32_t)로 구성되어 있기 때문입니다)
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("셰이더 모듈 생성에 실패했습니다!");
+        }
+
+        return shaderModule;
+    }
+
+    // 그래픽스 파이프라인 생성 함수
+    void createGraphicsPipeline() {
+        //
     }
 };
 
