@@ -4,10 +4,10 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <stdexcept>
 #include <vector>
-#include <limits>
 
 // 검증 계층 활성화 여부를 결정하는 플래그 정의
 #ifdef NDEBUG
