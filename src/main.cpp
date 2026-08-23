@@ -93,6 +93,7 @@ private:
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
     VkPipeline graphicsPipeline;
+    std::vector<VkFramebuffer> swapChainFramebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
     VkSemaphore imageAvailableSemaphore;
@@ -682,6 +683,48 @@ private:
         // 14. 파이프라인 생성이 끝났다면 셰이더 모듈 파괴 (메모리 해제)
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    }
+
+    // 프레임버퍼 생성 함수
+    void createFramebuffers() {
+        // 스왑체인 이미지 뷰의 개수만큼 프레임버퍼 배열 크기 할당
+        swapChainFramebuffers.resize(swapChainImageViews.size());
+
+        // 각 이미지 뷰를 순회하며 프레임버퍼 생성
+        for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+            
+            // 현재 프레임버퍼에 꽂아넣을 첨부물(Attachment) 배열
+            // 렌더 패스를 만들 때 0번째 슬롯에 색상 첨부물을 1개만 정의했으므로, 
+            // 배열 크기도 1개이고 현재 순서의 스왑체인 이미지 뷰를 넣습니다.
+            VkImageView attachments[] = {
+                swapChainImageViews[i]
+            };
+
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            
+            // 이 프레임버퍼와 호환되는(동일한 첨부물 구조를 가진) 렌더 패스 연결
+            framebufferInfo.renderPass = renderPass;
+            
+            // 첨부물 개수 및 배열 포인터 연결
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = attachments;
+            
+            // 프레임버퍼의 해상도 지정 (스왑체인 해상도와 완벽히 동일해야 함)
+            framebufferInfo.width = swapChainExtent.width;
+            framebufferInfo.height = swapChainExtent.height;
+            
+            // 이미지 레이어 수 (VR 기기용 입체 렌더링 등이 아니면 기본값인 1 사용)
+            framebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+                throw std::runtime_error("프레임버퍼 생성에 실패했습니다!");
+            }
+        }
+        // 생명 주기 관리
+        // 프레임버퍼는 스왑체인의 이미지 해상도(swapChainExtent)에 직접적으로 의존
+        // 만약 사용자가 창(Window)의 크기를 마우스로 드래그해서 조절하면 스왑체인을 파괴하고 새 해상도로 다시 만들어야 하는데
+        // 이때 기존 프레임버퍼들도 모조리 파괴(vkDestroyFramebuffer)한 뒤 새로운 스왑체인 이미지 뷰를 바탕으로 다시 생성해야 함
     }
 };
 
